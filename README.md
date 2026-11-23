@@ -34,3 +34,5 @@ Lofi Girlの配信を流しながら、雨の音を聞いて集中できるポ�
 - Web Audio API
 - Canvas API
 - フォント：[M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c)
+
+このサイトはClaudeが作ったので作者本人もどう動いているかわからない
