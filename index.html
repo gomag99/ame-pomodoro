@@ -109,8 +109,23 @@
 
   /* 音まわり */
   .card h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
-  .yt-wrap { width: 100%; aspect-ratio: 16 / 9; min-height: 200px; border-radius: 10px; overflow: hidden; background: #000; }
-  .yt-wrap > * { width: 100%; height: 100%; }
+  .now { display: flex; align-items: center; gap: 16px; }
+  .vinyl {
+    flex: none;
+    width: 92px; height: 92px; border-radius: 50%;
+    background:
+      radial-gradient(circle, var(--accent) 0 14%, #1a1a1a 15% 17%, transparent 18%),
+      repeating-radial-gradient(circle, #151515 0 2px, #222 3px 4px);
+    box-shadow: 0 6px 18px rgba(0,0,0,.4);
+    animation: spin 2.4s linear infinite;
+    animation-play-state: paused;
+  }
+  .vinyl.playing { animation-play-state: running; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .song-title { font-weight: 800; font-size: 17px; }
+  .song-info { color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .chord { font-size: 26px; font-weight: 800; color: var(--accent); margin-top: 6px; min-height: 34px; font-variant-numeric: tabular-nums; }
+  button.small { font-size: 13px; padding: 7px 12px; }
   .row { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--sub); }
   .row label { min-width: 64px; }
   .row input[type=range] { flex: 1; accent-color: var(--accent); }
@@ -162,10 +177,17 @@
   <!-- 右：音楽・雨・設定 -->
   <div class="col">
     <div class="card">
-      <h2>🎧 Lofi Girl
+      <h2>🎹 lofi（自動生成）
         <label class="switch"><input type="checkbox" id="musicOn"> 流す</label>
       </h2>
-      <div class="yt-wrap"><div id="yt"></div></div>
+      <div class="now">
+        <div class="vinyl" id="vinyl"></div>
+        <div>
+          <div class="song-title" id="songTitle">—</div>
+          <div class="song-info" id="songInfo">スタートを押すと曲が始まるよ</div>
+          <div class="chord" id="chordName"></div>
+        </div>
+      </div>
       <div class="row">
         <label for="musicVol">音量</label>
         <input type="range" id="musicVol" min="0" max="100">
@@ -174,7 +196,9 @@
       <div class="row">
         <label class="switch"><input type="checkbox" id="duck"> 休憩中は音楽を小さくする</label>
       </div>
-      <div class="msg" id="ytMsg"></div>
+      <div class="btns" style="margin-top:12px">
+        <button class="small" id="nextSongBtn">⏭ 次の曲</button>
+      </div>
     </div>
 
     <div class="card">
@@ -202,9 +226,7 @@
           <label>長い休憩（分）<input type="number" id="setLong" min="1" max="120"></label>
           <label>長い休憩までの回数<input type="number" id="setEvery" min="1" max="12"></label>
           <label class="full switch"><input type="checkbox" id="autoNext"> 終わったら次のフェーズを自動で始める</label>
-          <label class="full switch"><input type="checkbox" id="notifyOn"> 別のタブを見ているとき、終わったら通知する</label>
-          <label class="full">別の動画を流す（URLかID・空ならLofi Girlの配信）<input type="text" id="setVideo" placeholder="https://www.youtube.com/watch?v=..."></label>
-        </div>
+          <label class="full switch"><input type="checkbox" id="notifyOn"> 別のタブを見ているとき、終わったら通知する</label>        </div>
       </details>
     </div>
   </div>
@@ -212,21 +234,13 @@
 
 <script>
 // ===================== 設定 =====================
-// Lofi Girlのチャンネル。配信は立て直されるたびに動画IDが変わるので、
-// 動画IDではなく「このチャンネルで今やっている配信」を流す
-const LOFI_GIRL_CHANNEL = 'UCSJ4gkVC6NrvII8umztf0Ow';
-const OLD_DEFAULT_VIDEO = 'jfKfPfyJRdk'; // 前のバージョンで決め打ちしていた配信（もう終わっている）
 const defaults = {
   work: 25, short: 5, long: 15, every: 4,
   autoNext: true, duck: true, notifyOn: false,
   musicOn: true, musicVol: 50,
-  rainOn: true, rainVol: 60, intensity: 50,
-  videoId: '' // 空ならLofi Girlの配信
+  rainOn: true, rainVol: 60, intensity: 50
 };
 const settings = loadSettings();
-if (settings.videoId === OLD_DEFAULT_VIDEO) {
-  settings.videoId = '';
-}
 
 function loadSettings() {
   try {
@@ -392,6 +406,7 @@ function ensureAudio() {
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     buildRain();
+    buildMusic();
   }
   if (ctx.state === 'suspended') {
     ctx.resume();
@@ -567,94 +582,500 @@ function notify(text) {
   }
 }
 
-// ===================== YouTube（Lofi Girl） =====================
-let player = null;
-let playerReady = false;
-let currentMusicVol = settings.musicVol;
-let fadeTimer = null;
+// ===================== lofi（自動生成） =====================
+// 曲もWeb Audio APIでその場で作る。
+// コード進行・ベース・ドラム・メロディを16分音符ずつ「少し先の時刻」に予約していく。
+let musicGain = null;    // 音楽全体の音量（ON/OFFや休憩中のフェードに使う）
+let musicBus = null;     // 全部の楽器が集まる所
+let keysBus = null;      // エレピ（和音）
+let wowDepth = null;     // テープのような音程のゆらぎ
+let musicNoise = null;   // ドラム用のノイズ
+let musicTimer = null;
+let musicPlaying = false;
+let nextStepTime = 0;
+let step = 0;            // 曲の中で何番目の16分音符か
+let song = null;
+let lastProgIndex = -1;
+let melodyIndex = 0;
 
-function parseVideoId(input) {
-  const s = (input || '').trim();
-  if (/^[\w-]{11}$/.test(s)) {
-    return s;
-  }
-  const m = s.match(/(?:v=|youtu\.be\/|live\/|embed\/)([\w-]{11})/);
-  return m ? m[1] : null;
+const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+// 和音の種類：ルートから何半音上の音を鳴らすか（ルートはベースが弾くので省いている）
+const CHORD_TYPES = {
+  maj9: { notes: [4, 7, 11, 14], name: 'maj9' },
+  m9:   { notes: [3, 7, 10, 14], name: 'm9' },
+  m7:   { notes: [3, 7, 10, 15], name: 'm7' },
+  '13': { notes: [4, 10, 14, 21], name: '13' },
+  '7b9': { notes: [4, 10, 13, 19], name: '7(b9)' },
+  sus:  { notes: [5, 7, 10, 14], name: '9sus4' }
+};
+
+// コード進行（キーのドから何半音上がルートか、和音の種類）
+const PROGRESSIONS = [
+  [[2, 'm9'], [7, '13'], [0, 'maj9'], [9, 'm9']],     // ii - V - I - vi
+  [[5, 'maj9'], [4, 'm7'], [2, 'm9'], [0, 'maj9']],   // IV - iii - ii - I
+  [[9, 'm9'], [5, 'maj9'], [0, 'maj9'], [7, 'sus']],  // vi - IV - I - V
+  [[0, 'maj9'], [9, 'm9'], [2, 'm9'], [7, '13']],     // I - vi - ii - V
+  [[4, 'm7'], [9, '7b9'], [2, 'm9'], [7, '13']],      // iii - VI - ii - V
+  [[5, 'maj9'], [7, 'sus'], [4, 'm7'], [9, 'm9']]     // IV - V - iii - vi
+];
+
+const TITLE_A = ['rainy', 'sleepy', 'late night', 'quiet', 'soft', 'midnight', 'cozy', 'foggy', 'slow', 'blue'];
+const TITLE_B = ['window', 'tea', 'notebook', 'city lights', 'umbrella', 'pencil', 'train', 'cat nap', 'raincoat', 'desk lamp'];
+
+function pick(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+function mtof(midi) {
+  return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-function embedUrl() {
-  const params = 'enablejsapi=1&playsinline=1&rel=0&origin=' + encodeURIComponent(location.origin);
-  if (settings.videoId) {
-    return 'https://www.youtube.com/embed/' + settings.videoId + '?' + params;
+function buildMusic() {
+  musicGain = ctx.createGain();
+  musicGain.gain.value = 0;
+  musicGain.connect(ctx.destination);
+
+  // lofiっぽさ：低すぎる音と高すぎる音を削る → 少し歪ませる → 音量をそろえる
+  musicBus = ctx.createGain();
+  musicBus.gain.value = 0.8;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 50;
+  const tone = ctx.createBiquadFilter();
+  tone.type = 'lowpass';
+  tone.frequency.value = 5500;
+  tone.Q.value = 0.5;
+  const shaper = ctx.createWaveShaper();
+  shaper.curve = saturationCurve(2);
+  shaper.oversample = '2x';
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -18;
+  comp.ratio.value = 3;
+  comp.attack.value = 0.01;
+  comp.release.value = 0.2;
+  musicBus.connect(hp).connect(tone).connect(shaper).connect(comp).connect(musicGain);
+
+  // エレピはさらにこもらせる
+  keysBus = ctx.createGain();
+  const keysTone = ctx.createBiquadFilter();
+  keysTone.type = 'lowpass';
+  keysTone.frequency.value = 2600;
+  keysBus.connect(keysTone).connect(musicBus);
+
+  // テープのゆらぎ：ゆっくりした波で音程を数セント上下させる
+  const wow = ctx.createOscillator();
+  wow.frequency.value = 0.45;
+  wowDepth = ctx.createGain();
+  wowDepth.gain.value = 7;
+  wow.connect(wowDepth);
+  wow.start();
+
+  musicNoise = makeNoise('white', 1);
+
+  // レコードのサーッという音
+  const hiss = loopSource(makeNoise('pink', 4));
+  const hissGain = ctx.createGain();
+  hissGain.gain.value = 0.035;
+  hiss.connect(hissGain).connect(musicGain);
+
+  // レコードのパチパチ音：ほとんど無音で、たまにだけ小さな「プチッ」が入るノイズ
+  const len = ctx.sampleRate * 5;
+  const crackleBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = crackleBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    data[i] = Math.random() < 0.00035 ? (Math.random() * 2 - 1) * 0.8 : 0;
   }
-  return 'https://www.youtube.com/embed/live_stream?channel=' + LOFI_GIRL_CHANNEL + '&' + params;
+  const crackle = loopSource(crackleBuf);
+  const crackleHp = ctx.createBiquadFilter();
+  crackleHp.type = 'highpass';
+  crackleHp.frequency.value = 1200;
+  const crackleGain = ctx.createGain();
+  crackleGain.gain.value = 0.25;
+  crackle.connect(crackleHp).connect(crackleGain).connect(musicGain);
 }
 
-// iframeを自分で作ってから、YouTubeのAPIにつなぐ
-function createPlayer() {
-  if (player) {
-    player.destroy();
-    player = null;
+function saturationCurve(k) {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(k * x) / Math.tanh(k);
   }
-  playerReady = false;
-  $('ytMsg').style.display = 'none';
-  const wrap = document.querySelector('.yt-wrap');
-  wrap.innerHTML = '';
-  const iframe = document.createElement('iframe');
-  iframe.id = 'yt';
-  iframe.src = embedUrl();
-  iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-  iframe.setAttribute('frameborder', '0');
-  wrap.appendChild(iframe);
+  return curve;
+}
 
-  player = new YT.Player('yt', {
-    events: {
-      onReady: () => {
-        playerReady = true;
-        player.setVolume(currentMusicVol);
-      },
-      onError: (e) => {
-        showYtMsg('動画を再生できなかった（エラー ' + e.data + '）。');
+// 新しい曲を作る（キー・テンポ・コード進行・リズムをランダムに決める）
+function newSong() {
+  let progIndex;
+  do {
+    progIndex = Math.floor(Math.random() * PROGRESSIONS.length);
+  } while (progIndex === lastProgIndex);
+  lastProgIndex = progIndex;
+
+  const key = Math.floor(Math.random() * 12);
+  const bars = 32;
+  // 途中でドラムが抜ける小節
+  const breakStart = 12 + 4 * Math.floor(Math.random() * 3);
+
+  song = {
+    title: pick(TITLE_A) + ' ' + pick(TITLE_B),
+    key: key,
+    bpm: 68 + Math.floor(Math.random() * 15),
+    swing: 0.25 + Math.random() * 0.2,
+    bars: bars,
+    prog: PROGRESSIONS[progIndex].map(([r, type]) => ({ r: r, type: type })),
+    breakBars: Math.random() < 0.6 ? [breakStart, breakStart + 1] : [],
+    kick: pick([[0, 10], [0, 7, 10], [0, 3, 10], [0, 8, 10]]),
+    ghostHats: Math.random() * 0.25,
+    keysRehit: pick([[], [10], [6], [6, 14], [11]]),
+    bass: pick([
+      [{ pos: 0, deg: 0, len: 10 }, { pos: 10, deg: 0, len: 5 }],
+      [{ pos: 0, deg: 0, len: 6 }, { pos: 7, deg: 7, len: 3 }, { pos: 10, deg: 0, len: 5 }],
+      [{ pos: 0, deg: 0, len: 14 }],
+      [{ pos: 0, deg: 0, len: 8 }, { pos: 8, deg: 12, len: 2 }, { pos: 11, deg: 7, len: 4 }]
+    ]),
+    melody: Math.random() < 0.7,
+    melodySteps: pick([[0, 3, 6, 10], [2, 6, 8, 12], [0, 4, 7, 10, 14], [3, 6, 11]]),
+    scale: []
+  };
+
+  // メロディ用のペンタトニック（ド・レ・ミ・ソ・ラ）
+  const penta = [0, 2, 4, 7, 9];
+  for (let m = 67; m <= 86; m++) {
+    if (penta.includes(((m - key) % 12 + 12) % 12)) {
+      song.scale.push(m);
+    }
+  }
+  melodyIndex = Math.floor(song.scale.length / 2);
+
+  $('songTitle').textContent = song.title;
+  $('songInfo').textContent = 'Key ' + NOTE_NAMES[key] + ' ・ ' + song.bpm + ' BPM';
+  $('chordName').textContent = '';
+}
+
+function chordRoot(chord) {
+  return (song.key + chord.r) % 12;
+}
+function chordVoices(chord) {
+  const root = 48 + chordRoot(chord);
+  return CHORD_TYPES[chord.type].notes.map((iv) => {
+    let m = root + iv;
+    while (m > 79) {
+      m -= 12;
+    }
+    return m;
+  });
+}
+function chordLabel(chord) {
+  return NOTE_NAMES[chordRoot(chord)] + CHORD_TYPES[chord.type].name;
+}
+
+function startMusic() {
+  if (!ctx || musicPlaying) {
+    return;
+  }
+  musicPlaying = true;
+  if (!song) {
+    newSong();
+  }
+  nextStepTime = ctx.currentTime + 0.1;
+  musicTimer = setInterval(musicScheduler, 25);
+  $('vinyl').classList.add('playing');
+}
+
+function stopMusic() {
+  musicPlaying = false;
+  clearInterval(musicTimer);
+  $('vinyl').classList.remove('playing');
+  $('chordName').textContent = '';
+}
+
+function nextSong() {
+  if (!ctx) {
+    return;
+  }
+  newSong();
+  step = 0;
+  if (musicPlaying) {
+    nextStepTime = ctx.currentTime + 0.15;
+  }
+}
+
+// 少し先までの音をまとめて予約する。
+// 裏のタブではsetIntervalが遅くなることがあるので、そのときは長めに先まで予約する
+function musicScheduler() {
+  const lookAhead = document.hidden ? 1.5 : 0.15;
+  while (nextStepTime < ctx.currentTime + lookAhead) {
+    scheduleStep(step, nextStepTime);
+    nextStepTime += 60 / song.bpm / 4;
+    step++;
+    if (step >= song.bars * 16) {
+      newSong();
+      step = 0;
+    }
+  }
+}
+
+function scheduleStep(s, t) {
+  const bar = Math.floor(s / 16);
+  const pos = s % 16;
+  const chord = song.prog[bar % song.prog.length];
+  const stepDur = 60 / song.bpm / 4;
+
+  // スウィング（裏拍を少し遅らせる）
+  let time = t;
+  if (pos % 4 === 2) {
+    time += song.swing * stepDur;
+  } else if (pos % 2 === 1) {
+    time += song.swing * 0.5 * stepDur;
+  }
+  const human = () => (Math.random() - 0.5) * 0.012; // 人が弾いたような小さなズレ
+
+  const intro = bar < 4;
+  const outro = bar >= song.bars - 4;
+  const drumsOn = !intro && !outro && !song.breakBars.includes(bar);
+
+  // 和音
+  if (pos === 0) {
+    chordVoices(chord).forEach((m, i) => {
+      playKey(m, time + i * 0.014 + human(), stepDur * 16 * 0.97, 0.7 + Math.random() * 0.2);
+    });
+    showChordAt(chordLabel(chord), time);
+  }
+  if (!intro && song.keysRehit.includes(pos)) {
+    chordVoices(chord).forEach((m, i) => {
+      playKey(m, time + i * 0.01 + human(), stepDur * 4, 0.35 + Math.random() * 0.15);
+    });
+  }
+
+  // ベース（イントロの前半はお休み）
+  if (bar >= 2) {
+    const b = song.bass.find((x) => x.pos === pos);
+    if (b) {
+      playBass(36 + chordRoot(chord) + b.deg, time + human(), b.len * stepDur, 0.8);
+    }
+  }
+
+  // ドラム
+  if (drumsOn) {
+    const fillBar = bar % 4 === 3;
+    if (song.kick.includes(pos) || (fillBar && pos === 14 && Math.random() < 0.6)) {
+      playKick(time + human(), 0.7);
+    }
+    if (pos === 4 || pos === 12) {
+      playSnare(time + human(), 0.6 + Math.random() * 0.15);
+    }
+    if (pos % 2 === 0 && Math.random() < 0.92) {
+      playHat(time + human(), pos % 4 === 0 ? 0.22 : 0.14, false);
+    } else if (pos % 2 === 1 && Math.random() < song.ghostHats) {
+      playHat(time + human(), 0.07, false);
+    }
+    if (fillBar && pos === 14 && Math.random() < 0.5) {
+      playHat(time, 0.15, true);
+    }
+  }
+
+  // メロディ（曲の真ん中あたりだけ、まばらに）
+  if (song.melody && bar >= 8 && bar < song.bars - 6 && song.melodySteps.includes(pos) && Math.random() < 0.45) {
+    const len = stepDur * (2 + Math.floor(Math.random() * 3));
+    playLead(nextMelodyNote(chord), time + human(), len, 0.5);
+  }
+}
+
+// 和音の名前を、実際に鳴るタイミングで画面に出す
+function showChordAt(label, time) {
+  const delay = Math.max(0, (time - ctx.currentTime) * 1000);
+  setTimeout(() => {
+    if (musicPlaying) {
+      $('chordName').textContent = label;
+    }
+  }, delay);
+}
+
+// メロディは前の音から近い音に動かす。半分くらいは和音の音に合わせる
+function nextMelodyNote(chord) {
+  const move = Math.floor(Math.random() * 5) - 2;
+  melodyIndex = Math.max(0, Math.min(song.scale.length - 1, melodyIndex + move));
+  let note = song.scale[melodyIndex];
+  if (Math.random() < 0.5) {
+    const tones = chordVoices(chord).map((m) => m % 12);
+    let best = note;
+    let bestDist = 99;
+    for (const m of song.scale) {
+      if (tones.includes(m % 12) && Math.abs(m - note) < bestDist) {
+        best = m;
+        bestDist = Math.abs(m - note);
       }
     }
+    note = best;
+    melodyIndex = song.scale.indexOf(note);
+  }
+  return note;
+}
+
+// 発振器を作る。テープのゆらぎもつなぎ、鳴り終わったら外す
+function makeOsc(type, freq, wobble) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.value = freq;
+  if (wobble) {
+    wowDepth.connect(o.detune);
+    o.onended = () => {
+      wowDepth.disconnect(o.detune);
+    };
+  }
+  return o;
+}
+
+// エレピ：FM合成で「コーン」という鐘っぽい音を作る
+function playKey(midi, t, dur, vel) {
+  const f = mtof(midi);
+  const out = ctx.createGain();
+  const peak = 0.11 * vel;
+  out.gain.setValueAtTime(0, t);
+  out.gain.linearRampToValueAtTime(peak, t + 0.008);
+  out.gain.setTargetAtTime(peak * 0.35, t + 0.008, 0.6);
+  out.gain.setTargetAtTime(0, t + dur, 0.15);
+
+  const carrier = makeOsc('sine', f, true);
+  const mod = makeOsc('sine', f, false);
+  const modGain = ctx.createGain();
+  modGain.gain.setValueAtTime(f * 1.2 * vel, t);
+  modGain.gain.setTargetAtTime(f * 0.15, t, 0.15);
+  mod.connect(modGain).connect(carrier.frequency);
+
+  const body = makeOsc('triangle', f, true);
+  const bodyGain = ctx.createGain();
+  bodyGain.gain.value = 0.35;
+
+  let dest = keysBus;
+  if (ctx.createStereoPanner) {
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = (midi - 64) / 40;
+    pan.connect(keysBus);
+    dest = pan;
+  }
+  carrier.connect(out);
+  body.connect(bodyGain).connect(out);
+  out.connect(dest);
+
+  const end = t + dur + 1;
+  [carrier, mod, body].forEach((o) => {
+    o.start(t);
+    o.stop(end);
   });
 }
 
-window.onYouTubeIframeAPIReady = createPlayer;
+function playBass(midi, t, dur, vel) {
+  const f = mtof(midi);
+  const g = ctx.createGain();
+  const peak = 0.3 * vel;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(peak, t + 0.01);
+  g.gain.setTargetAtTime(peak * 0.6, t + 0.01, 0.3);
+  g.gain.setTargetAtTime(0, t + dur, 0.06);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 500;
 
-function showYtMsg(text) {
-  const el = $('ytMsg');
-  el.textContent = text;
-  el.style.display = 'block';
+  const o1 = makeOsc('sine', f, true);
+  const o2 = makeOsc('triangle', f, true);
+  const g2 = ctx.createGain();
+  g2.gain.value = 0.3;
+  o1.connect(g);
+  o2.connect(g2).connect(g);
+  g.connect(lp).connect(musicBus);
+  [o1, o2].forEach((o) => {
+    o.start(t);
+    o.stop(t + dur + 0.5);
+  });
 }
 
-function playMusic() {
-  if (playerReady) {
-    player.playVideo();
-  }
+function playKick(t, vel) {
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(120, t);
+  o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vel * 0.9, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  o.connect(g).connect(musicBus);
+  o.start(t);
+  o.stop(t + 0.45);
 }
-function stopMusic() {
-  if (playerReady) {
-    player.pauseVideo();
-  }
+
+function noiseHit(t) {
+  const src = ctx.createBufferSource();
+  src.buffer = musicNoise;
+  src.start(t, Math.random() * 0.5);
+  src.stop(t + 0.5);
+  return src;
+}
+
+function playSnare(t, vel) {
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1800;
+  bp.Q.value = 0.7;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vel * 0.35, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  noiseHit(t).connect(bp).connect(g).connect(musicBus);
+
+  const o = ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.value = 190;
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(vel * 0.2, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  o.connect(og).connect(musicBus);
+  o.start(t);
+  o.stop(t + 0.1);
+}
+
+function playHat(t, vel, open) {
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 5000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vel * 0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + (open ? 0.25 : 0.04));
+  noiseHit(t).connect(hp).connect(g).connect(musicBus);
+}
+
+function playLead(midi, t, dur, vel) {
+  const f = mtof(midi);
+  const g = ctx.createGain();
+  const peak = 0.1 * vel;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(peak, t + 0.03);
+  g.gain.setTargetAtTime(peak * 0.5, t + 0.03, 0.4);
+  g.gain.setTargetAtTime(0, t + dur, 0.12);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 2000;
+
+  const o1 = makeOsc('sine', f, true);
+  const o2 = makeOsc('triangle', f / 2, true);
+  const g2 = ctx.createGain();
+  g2.gain.value = 0.25;
+  o1.connect(g);
+  o2.connect(g2).connect(g);
+  g.connect(lp).connect(musicBus);
+  [o1, o2].forEach((o) => {
+    o.start(t);
+    o.stop(t + dur + 0.8);
+  });
 }
 
 // 音量を少しずつ変える（急に変わると耳障りなので）
-function fadeMusicTo(target, ms) {
-  clearInterval(fadeTimer);
-  const start = currentMusicVol;
-  const steps = Math.max(1, Math.round(ms / 50));
-  let i = 0;
-  fadeTimer = setInterval(() => {
-    i++;
-    currentMusicVol = start + (target - start) * (i / steps);
-    if (playerReady) {
-      player.setVolume(Math.round(currentMusicVol));
-    }
-    if (i >= steps) {
-      clearInterval(fadeTimer);
-    }
-  }, 50);
+let musicStopTimer = null;
+function fadeMusicTo(vol, ms) {
+  if (!musicGain) {
+    return;
+  }
+  const target = settings.musicOn ? (vol / 100) * 0.9 : 0;
+  musicGain.gain.setTargetAtTime(target, ctx.currentTime, ms / 1000 / 3);
 }
 
 function musicTargetVolume() {
@@ -665,6 +1086,21 @@ function musicTargetVolume() {
 }
 function applyMusicForPhase() {
   fadeMusicTo(musicTargetVolume(), 2000);
+}
+
+function playMusic() {
+  clearTimeout(musicStopTimer);
+  startMusic();
+  applyMusicForPhase();
+}
+function pauseMusicSoftly() {
+  fadeMusicTo(0, 600);
+  clearTimeout(musicStopTimer);
+  musicStopTimer = setTimeout(() => {
+    if (!settings.musicOn) {
+      stopMusic();
+    }
+  }, 1200);
 }
 
 // ===================== 窓の雨アニメーション =====================
@@ -860,9 +1296,17 @@ bindRange('rainVol', 'rainVol', () => { ensureAudio(); });
 bindRange('intensity', 'intensity', updateRain);
 bindCheck('musicOn', 'musicOn', () => {
   if (settings.musicOn) {
+    ensureAudio();
     playMusic();
   } else {
-    stopMusic();
+    pauseMusicSoftly();
+  }
+});
+$('nextSongBtn').addEventListener('click', () => {
+  ensureAudio();
+  nextSong();
+  if (settings.musicOn) {
+    playMusic();
   }
 });
 bindCheck('rainOn', 'rainOn', () => { ensureAudio(); });
@@ -878,31 +1322,12 @@ bindNumber('setShort', 'short');
 bindNumber('setLong', 'long');
 bindNumber('setEvery', 'every');
 
-$('setVideo').value = settings.videoId;
-$('setVideo').addEventListener('change', () => {
-  const raw = $('setVideo').value.trim();
-  const id = raw === '' ? '' : parseVideoId(raw);
-  if (id === null) {
-    showYtMsg('URLから動画IDを読み取れなかった。');
-    return;
-  }
-  settings.videoId = id;
-  saveSettings();
-  if (window.YT && YT.Player) {
-    createPlayer();
-  }
-});
-
 remainingMs = durationOf('work');
 render();
 window.addEventListener('resize', resizeScene);
 resizeScene();
 requestAnimationFrame(drawScene);
 
-// YouTube IFrame APIを読み込む
-const ytScript = document.createElement('script');
-ytScript.src = 'https://www.youtube.com/iframe_api';
-document.head.appendChild(ytScript);
 </script>
 </body>
 </html>
