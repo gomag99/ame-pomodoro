@@ -202,7 +202,8 @@
           <label>長い休憩（分）<input type="number" id="setLong" min="1" max="120"></label>
           <label>長い休憩までの回数<input type="number" id="setEvery" min="1" max="12"></label>
           <label class="full switch"><input type="checkbox" id="autoNext"> 終わったら次のフェーズを自動で始める</label>
-          <label class="full">YouTubeの動画（URLかID）<input type="text" id="setVideo" placeholder="https://www.youtube.com/watch?v=..."></label>
+          <label class="full switch"><input type="checkbox" id="notifyOn"> 別のタブを見ているとき、終わったら通知する</label>
+          <label class="full">別の動画を流す（URLかID・空ならLofi Girlの配信）<input type="text" id="setVideo" placeholder="https://www.youtube.com/watch?v=..."></label>
         </div>
       </details>
     </div>
@@ -211,15 +212,21 @@
 
 <script>
 // ===================== 設定 =====================
-const DEFAULT_VIDEO = 'jfKfPfyJRdk'; // Lofi Girl「lofi hip hop radio - beats to relax/study to」
+// Lofi Girlのチャンネル。配信は立て直されるたびに動画IDが変わるので、
+// 動画IDではなく「このチャンネルで今やっている配信」を流す
+const LOFI_GIRL_CHANNEL = 'UCSJ4gkVC6NrvII8umztf0Ow';
+const OLD_DEFAULT_VIDEO = 'jfKfPfyJRdk'; // 前のバージョンで決め打ちしていた配信（もう終わっている）
 const defaults = {
   work: 25, short: 5, long: 15, every: 4,
-  autoNext: true, duck: true,
+  autoNext: true, duck: true, notifyOn: false,
   musicOn: true, musicVol: 50,
   rainOn: true, rainVol: 60, intensity: 50,
-  videoId: DEFAULT_VIDEO
+  videoId: '' // 空ならLofi Girlの配信
 };
 const settings = loadSettings();
+if (settings.videoId === OLD_DEFAULT_VIDEO) {
+  settings.videoId = '';
+}
 
 function loadSettings() {
   try {
@@ -259,7 +266,6 @@ function startTimer() {
     return;
   }
   ensureAudio();
-  askNotificationPermission();
   running = true;
   endAt = Date.now() + remainingMs;
   tickTimer = setInterval(tick, 250);
@@ -540,6 +546,7 @@ function chime(workEnded) {
 }
 
 // ===================== 通知 =====================
+// 設定で通知をオンにしたときだけ、ブラウザに許可を求める
 function askNotificationPermission() {
   if ('Notification' in window && Notification.permission === 'default') {
     try {
@@ -550,7 +557,7 @@ function askNotificationPermission() {
   }
 }
 function notify(text) {
-  if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) {
+  if (!settings.notifyOn || !('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) {
     return;
   }
   try {
@@ -575,21 +582,45 @@ function parseVideoId(input) {
   return m ? m[1] : null;
 }
 
-window.onYouTubeIframeAPIReady = function () {
+function embedUrl() {
+  const params = 'enablejsapi=1&playsinline=1&rel=0&origin=' + encodeURIComponent(location.origin);
+  if (settings.videoId) {
+    return 'https://www.youtube.com/embed/' + settings.videoId + '?' + params;
+  }
+  return 'https://www.youtube.com/embed/live_stream?channel=' + LOFI_GIRL_CHANNEL + '&' + params;
+}
+
+// iframeを自分で作ってから、YouTubeのAPIにつなぐ
+function createPlayer() {
+  if (player) {
+    player.destroy();
+    player = null;
+  }
+  playerReady = false;
+  $('ytMsg').style.display = 'none';
+  const wrap = document.querySelector('.yt-wrap');
+  wrap.innerHTML = '';
+  const iframe = document.createElement('iframe');
+  iframe.id = 'yt';
+  iframe.src = embedUrl();
+  iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
+  iframe.setAttribute('frameborder', '0');
+  wrap.appendChild(iframe);
+
   player = new YT.Player('yt', {
-    videoId: settings.videoId,
-    playerVars: { playsinline: 1, rel: 0 },
     events: {
       onReady: () => {
         playerReady = true;
         player.setVolume(currentMusicVol);
       },
       onError: (e) => {
-        showYtMsg('動画を再生できなかった（エラー ' + e.data + '）。ファイルを直接開いているなら、GitHub Pagesなどのサーバーに置いて開いてみて。');
+        showYtMsg('動画を再生できなかった（エラー ' + e.data + '）。');
       }
     }
   });
-};
+}
+
+window.onYouTubeIframeAPIReady = createPlayer;
 
 function showYtMsg(text) {
   const el = $('ytMsg');
@@ -837,23 +868,28 @@ bindCheck('musicOn', 'musicOn', () => {
 bindCheck('rainOn', 'rainOn', () => { ensureAudio(); });
 bindCheck('duck', 'duck', applyMusicForPhase);
 bindCheck('autoNext', 'autoNext', () => {});
+bindCheck('notifyOn', 'notifyOn', () => {
+  if (settings.notifyOn) {
+    askNotificationPermission();
+  }
+});
 bindNumber('setWork', 'work');
 bindNumber('setShort', 'short');
 bindNumber('setLong', 'long');
 bindNumber('setEvery', 'every');
 
-$('setVideo').value = settings.videoId === DEFAULT_VIDEO ? '' : settings.videoId;
+$('setVideo').value = settings.videoId;
 $('setVideo').addEventListener('change', () => {
-  const raw = $('setVideo').value;
-  const id = raw.trim() === '' ? DEFAULT_VIDEO : parseVideoId(raw);
-  if (!id) {
+  const raw = $('setVideo').value.trim();
+  const id = raw === '' ? '' : parseVideoId(raw);
+  if (id === null) {
     showYtMsg('URLから動画IDを読み取れなかった。');
     return;
   }
   settings.videoId = id;
   saveSettings();
-  if (playerReady) {
-    player.cueVideoById(id);
+  if (window.YT && YT.Player) {
+    createPlayer();
   }
 });
 
