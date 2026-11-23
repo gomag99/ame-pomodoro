@@ -3,10 +3,6 @@
 Lofi Girlの配信を流しながら、雨の音を聞いて集中できるポモドーロタイマー。
 `index.html` の1ファイルだけで動く。
 
-> [!NOTE]
-> このアプリのコードとREADMEは、すべてClaude（AnthropicのAI）が書いたもの。
-> 作者（gomag99）はコードの中身を何も把握していない。
-
 ## 機能
 
 - ⏱️ **ポモドーロタイマー**：25分作業 → 5分休憩。4回ごとに15分の長い休憩（時間は設定で変えられる）
@@ -38,3 +34,5 @@ Lofi Girlの配信を流しながら、雨の音を聞いて集中できるポ�
 - Web Audio API
 - Canvas API
 - フォント：[M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c)
+
+このサイトはClaudeが作ったので作者本人もどう動いているかわからない
