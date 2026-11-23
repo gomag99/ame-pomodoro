@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ame-pomodoro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg1: #171a30;
+    --bg2: #2b2452;
+    --card: rgba(18, 16, 38, 0.62);
+    --line: rgba(255, 255, 255, 0.08);
+    --text: #efe9f4;
+    --sub: #a9a3c4;
+    --work: #f2b880;
+    --break: #8fd3c7;
+    --accent: var(--work);
+  }
+  body.is-break { --accent: var(--break); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'M PLUS Rounded 1c', system-ui, sans-serif;
+    color: var(--text);
+    background: radial-gradient(1200px 600px at 20% 0%, #3a2f63 0%, transparent 60%),
+                linear-gradient(160deg, var(--bg1), var(--bg2));
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 40px;
+  }
+  .app {
+    width: 100%;
+    max-width: 1040px;
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 820px) { .app { grid-template-columns: 1fr; } }
+  h1 {
+    grid-column: 1 / -1;
+    margin: 0 0 2px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    color: var(--sub);
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 18px;
+    backdrop-filter: blur(6px);
+  }
+  .col { display: flex; flex-direction: column; gap: 18px; }
+
+  /* 窓（雨のアニメーション） */
+  .window {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 10px solid #3a2c27;
+    box-shadow: inset 0 0 0 3px #2a1f1b, 0 12px 30px rgba(0,0,0,.35);
+    aspect-ratio: 16 / 10;
+    background: #0d1b2e;
+  }
+  .window canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .window .frame-v, .window .frame-h { position: absolute; background: #3a2c27; }
+  .window .frame-v { top: 0; bottom: 0; left: 50%; width: 8px; transform: translateX(-50%); }
+  .window .frame-h { left: 0; right: 0; top: 50%; height: 8px; transform: translateY(-50%); }
+  .sill { height: 14px; margin: -4px 6px 0; border-radius: 0 0 8px 8px; background: #4a3830; position: relative; }
+  .sill span { position: absolute; right: 18px; bottom: 12px; font-size: 26px; }
+
+  /* タイマー */
+  .phase { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .1em; }
+  .time {
+    font-size: clamp(64px, 12vw, 104px);
+    font-weight: 800;
+    line-height: 1;
+    margin: 6px 0 14px;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .bar { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .bar > div { height: 100%; width: 0%; background: var(--accent); transition: width .3s linear; }
+  .dots { display: flex; gap: 8px; margin: 14px 0 16px; align-items: center; color: var(--sub); font-size: 13px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--sub); }
+  .dot.done { background: var(--work); border-color: var(--work); }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,.06);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  button:hover { background: rgba(255,255,255,.12); }
+  button.primary { background: var(--accent); color: #1b1630; border-color: transparent; min-width: 120px; }
+  button.primary:hover { filter: brightness(1.08); }
+  .hint { color: var(--sub); font-size: 12px; margin-top: 10px; }
+
+  /* 音まわり */
+  .card h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
+  .yt-wrap { width: 100%; aspect-ratio: 16 / 9; min-height: 200px; border-radius: 10px; overflow: hidden; background: #000; }
+  .yt-wrap > * { width: 100%; height: 100%; }
+  .row { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--sub); }
+  .row label { min-width: 64px; }
+  .row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .row .val { width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sub); cursor: pointer; font-weight: 400; }
+  .switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .msg { font-size: 12px; color: #ffb3b3; margin-top: 8px; display: none; }
+
+  /* 設定 */
+  details summary { cursor: pointer; font-weight: 700; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 12px; font-size: 13px; color: var(--sub); }
+  .grid label { display: flex; flex-direction: column; gap: 4px; }
+  .grid input[type=number], .grid input[type=text] {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+  }
+  .grid .full { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🌧️ ame-pomodoro</h1>
+
+  <!-- 左：窓とタイマー -->
+  <div class="col">
+    <div>
+      <div class="window">
+        <canvas id="scene"></canvas>
+        <div class="frame-v"></div>
+        <div class="frame-h"></div>
+      </div>
+      <div class="sill"><span>☕</span></div>
+    </div>
+
+    <div class="card">
+      <div class="phase" id="phaseLabel">作業</div>
+      <div class="time" id="timeText">25:00</div>
+      <div class="bar"><div id="progress"></div></div>
+      <div class="dots" id="dots"></div>
+      <div class="btns">
+        <button class="primary" id="startBtn">▶ スタート</button>
+        <button id="skipBtn">⏭ スキップ</button>
+        <button id="resetBtn">↺ リセット</button>
+      </div>
+      <div class="hint">スペースキーでスタート／一時停止できるよ</div>
+    </div>
+  </div>
+
+  <!-- 右：音楽・雨・設定 -->
+  <div class="col">
+    <div class="card">
+      <h2>🎧 Lofi Girl
+        <label class="switch"><input type="checkbox" id="musicOn"> 流す</label>
+      </h2>
+      <div class="yt-wrap"><div id="yt"></div></div>
+      <div class="row">
+        <label for="musicVol">音量</label>
+        <input type="range" id="musicVol" min="0" max="100">
+        <span class="val" id="musicVolVal"></span>
+      </div>
+      <div class="row">
+        <label class="switch"><input type="checkbox" id="duck"> 休憩中は音楽を小さくする</label>
+      </div>
+      <div class="msg" id="ytMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>🌧️ 雨の音
+        <label class="switch"><input type="checkbox" id="rainOn"> 鳴らす</label>
+      </h2>
+      <div class="row">
+        <label for="rainVol">音量</label>
+        <input type="range" id="rainVol" min="0" max="100">
+        <span class="val" id="rainVolVal"></span>
+      </div>
+      <div class="row">
+        <label for="intensity">雨の強さ</label>
+        <input type="range" id="intensity" min="0" max="100">
+        <span class="val" id="intensityVal"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>⚙️ 設定</summary>
+        <div class="grid">
+          <label>作業（分）<input type="number" id="setWork" min="1" max="180"></label>
+          <label>小休憩（分）<input type="number" id="setShort" min="1" max="60"></label>
+          <label>長い休憩（分）<input type="number" id="setLong" min="1" max="120"></label>
+          <label>長い休憩までの回数<input type="number" id="setEvery" min="1" max="12"></label>
+          <label class="full switch"><input type="checkbox" id="autoNext"> 終わったら次のフェーズを自動で始める</label>
+          <label class="full">YouTubeの動画（URLかID）<input type="text" id="setVideo" placeholder="https://www.youtube.com/watch?v=..."></label>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== 設定 =====================
+const DEFAULT_VIDEO = 'jfKfPfyJRdk'; // Lofi Girl「lofi hip hop radio - beats to relax/study to」
+const defaults = {
+  work: 25, short: 5, long: 15, every: 4,
+  autoNext: true, duck: true,
+  musicOn: true, musicVol: 50,
+  rainOn: true, rainVol: 60, intensity: 50,
+  videoId: DEFAULT_VIDEO
+};
+const settings = loadSettings();
+
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('amePomodoro') || '{}');
+    return Object.assign({}, defaults, saved);
+  } catch (e) {
+    return Object.assign({}, defaults);
+  }
+}
+function saveSettings() {
+  try {
+    localStorage.setItem('amePomodoro', JSON.stringify(settings));
+  } catch (e) {
+    // 保存できない環境でも動くようにしておく
+  }
+}
+
+const $ = (id) => document.getElementById(id);
+
+// ===================== タイマー =====================
+// 1秒ずつ減らすのではなく「終わる時刻」を覚えて、毎回 残り = 終わる時刻 - 今 を計算する。
+// タブが裏に回ってsetIntervalが間引かれても時間がズレない。
+const PHASE_LABEL = { work: '作業', short: '小休憩', long: '長い休憩' };
+let phase = 'work';
+let doneCount = 0;           // 終えた作業の回数
+let running = false;
+let endAt = 0;               // 終わる時刻（ミリ秒）
+let remainingMs = durationOf('work');
+let tickTimer = null;
+
+function durationOf(p) {
+  return settings[p] * 60 * 1000;
+}
+
+function startTimer() {
+  if (running) {
+    return;
+  }
+  ensureAudio();
+  askNotificationPermission();
+  running = true;
+  endAt = Date.now() + remainingMs;
+  tickTimer = setInterval(tick, 250);
+  if (settings.musicOn) {
+    playMusic();
+  }
+  applyMusicForPhase();
+  render();
+}
+
+function pauseTimer() {
+  if (!running) {
+    return;
+  }
+  running = false;
+  remainingMs = Math.max(0, endAt - Date.now());
+  clearInterval(tickTimer);
+  render();
+}
+
+function tick() {
+  const left = endAt - Date.now();
+  if (left <= 0) {
+    remainingMs = 0;
+    finishPhase();
+    return;
+  }
+  remainingMs = left;
+  render();
+}
+
+function finishPhase() {
+  clearInterval(tickTimer);
+  running = false;
+  const wasWork = phase === 'work';
+  if (wasWork) {
+    doneCount++;
+    phase = (doneCount % settings.every === 0) ? 'long' : 'short';
+  } else {
+    phase = 'work';
+  }
+  remainingMs = durationOf(phase);
+  chime(wasWork);
+  notify(wasWork ? 'おつかれ！休憩しよう ☕' : '休憩おわり、作業に戻ろう ✏️');
+  applyMusicForPhase();
+  if (settings.autoNext) {
+    startTimer();
+  } else {
+    render();
+  }
+}
+
+function skipPhase() {
+  const wasRunning = running;
+  clearInterval(tickTimer);
+  running = false;
+  if (phase === 'work') {
+    doneCount++;
+    phase = (doneCount % settings.every === 0) ? 'long' : 'short';
+  } else {
+    phase = 'work';
+  }
+  remainingMs = durationOf(phase);
+  applyMusicForPhase();
+  if (wasRunning) {
+    startTimer();
+  } else {
+    render();
+  }
+}
+
+function resetTimer() {
+  clearInterval(tickTimer);
+  running = false;
+  phase = 'work';
+  doneCount = 0;
+  remainingMs = durationOf('work');
+  applyMusicForPhase();
+  render();
+}
+
+function formatTime(ms) {
+  const total = Math.ceil(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function render() {
+  const text = formatTime(remainingMs);
+  $('timeText').textContent = text;
+  $('phaseLabel').textContent = PHASE_LABEL[phase] + (running ? '' : '（停止中）');
+  $('startBtn').textContent = running ? '⏸ 一時停止' : '▶ スタート';
+  const total = durationOf(phase);
+  $('progress').style.width = (100 * (1 - remainingMs / total)) + '%';
+  document.body.classList.toggle('is-break', phase !== 'work');
+  document.title = (running ? text + ' · ' : '') + PHASE_LABEL[phase] + ' | ame-pomodoro';
+
+  // 長い休憩までの進み具合
+  const dots = $('dots');
+  dots.innerHTML = '';
+  const inCycle = doneCount % settings.every;
+  const filled = (phase === 'long') ? settings.every : inCycle;
+  for (let i = 0; i < settings.every; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i < filled ? ' done' : '');
+    dots.appendChild(d);
+  }
+  const label = document.createElement('span');
+  label.textContent = '今日 ' + doneCount + ' ポモドーロ';
+  dots.appendChild(label);
+}
+
+// ===================== 音（Web Audio API） =====================
+let ctx = null;
+let rainMaster = null;   // 雨全体の音量
+let sheetGain = null;    // ザーッという面の音
+let sheetFilter = null;
+let dropBuffer = null;
+let dropTimer = null;
+
+function ensureAudio() {
+  // ブラウザはクリックなどの操作のあとでないと音を鳴らせないので、ボタンを押したときに作る
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    buildRain();
+  }
+  if (ctx.state === 'suspended') {
+    ctx.resume();
+  }
+  updateRain();
+}
+
+// ノイズを作る。pink=サーッ、brown=ゴーッという低い音
+function makeNoise(type, seconds) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      if (type === 'pink') {
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+        b6 = white * 0.115926;
+      } else if (type === 'brown') {
+        last = (last + 0.02 * white) / 1.02;
+        data[i] = last * 3.5;
+      } else {
+        data[i] = white;
+      }
+    }
+  }
+  return buf;
+}
+
+function loopSource(buffer) {
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.loop = true;
+  src.start();
+  return src;
+}
+
+function buildRain() {
+  rainMaster = ctx.createGain();
+  rainMaster.gain.value = 0;
+  rainMaster.connect(ctx.destination);
+
+  // 1. 雨の「面」の音：ピンクノイズの低すぎる所と高すぎる所を削る
+  const sheet = loopSource(makeNoise('pink', 6));
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 400;
+  sheetFilter = ctx.createBiquadFilter();
+  sheetFilter.type = 'lowpass';
+  sheetFilter.frequency.value = 6000;
+  sheetGain = ctx.createGain();
+  sheet.connect(hp).connect(sheetFilter).connect(sheetGain).connect(rainMaster);
+
+  // 2. 遠くの低いゴーッという音
+  const rumble = loopSource(makeNoise('brown', 6));
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 300;
+  const rumbleGain = ctx.createGain();
+  rumbleGain.gain.value = 0.5;
+  rumble.connect(lp).connect(rumbleGain).connect(rainMaster);
+
+  // 3. ポツッという雨粒用の短いノイズ
+  dropBuffer = makeNoise('white', 0.2);
+  dropTimer = setInterval(scheduleDrops, 100);
+}
+
+// 0.1秒ごとに「この0.1秒で何粒落ちるか」をランダムに決めて予約する
+function scheduleDrops() {
+  if (!ctx || !settings.rainOn) {
+    return;
+  }
+  const perSecond = 4 + settings.intensity * 0.5;
+  let count = 0;
+  const expected = perSecond * 0.1;
+  // ポアソン分布っぽくばらつかせる
+  let p = Math.exp(-expected), s = p, u = Math.random();
+  while (u > s && count < 30) {
+    count++;
+    p *= expected / count;
+    s += p;
+  }
+  for (let i = 0; i < count; i++) {
+    playDrop(ctx.currentTime + 0.05 + Math.random() * 0.1);
+  }
+}
+
+function playDrop(when) {
+  const src = ctx.createBufferSource();
+  src.buffer = dropBuffer;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1500 + Math.random() * 4000;
+  bp.Q.value = 6 + Math.random() * 10;
+  const g = ctx.createGain();
+  const peak = 0.15 + Math.random() * 0.35;
+  const decay = 0.02 + Math.random() * 0.06;
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(peak, when + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+  let out = g;
+  if (ctx.createStereoPanner) {
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.random() * 1.6 - 0.8;
+    g.connect(pan);
+    out = pan;
+  }
+  out.connect(rainMaster);
+  src.connect(bp).connect(g);
+  src.start(when);
+  src.stop(when + decay + 0.05);
+}
+
+function updateRain() {
+  if (!ctx) {
+    return;
+  }
+  const now = ctx.currentTime;
+  const vol = settings.rainOn ? (settings.rainVol / 100) * 0.9 : 0;
+  rainMaster.gain.setTargetAtTime(vol, now, 0.4);
+  const k = settings.intensity / 100;
+  sheetGain.gain.setTargetAtTime(0.3 + k * 0.9, now, 0.4);
+  sheetFilter.frequency.setTargetAtTime(2500 + k * 6000, now, 0.4);
+}
+
+// フェーズが終わったときのチャイム
+function chime(workEnded) {
+  if (!ctx) {
+    return;
+  }
+  const notes = workEnded ? [659.25, 783.99, 1046.5] : [1046.5, 783.99, 659.25];
+  notes.forEach((freq, i) => {
+    const t = ctx.currentTime + i * 0.18;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.25, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 1.3);
+  });
+}
+
+// ===================== 通知 =====================
+function askNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    try {
+      Notification.requestPermission();
+    } catch (e) {
+      // 通知が使えない環境は無視
+    }
+  }
+}
+function notify(text) {
+  if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) {
+    return;
+  }
+  try {
+    new Notification('ame-pomodoro', { body: text });
+  } catch (e) {
+    // 無視
+  }
+}
+
+// ===================== YouTube（Lofi Girl） =====================
+let player = null;
+let playerReady = false;
+let currentMusicVol = settings.musicVol;
+let fadeTimer = null;
+
+function parseVideoId(input) {
+  const s = (input || '').trim();
+  if (/^[\w-]{11}$/.test(s)) {
+    return s;
+  }
+  const m = s.match(/(?:v=|youtu\.be\/|live\/|embed\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+window.onYouTubeIframeAPIReady = function () {
+  player = new YT.Player('yt', {
+    videoId: settings.videoId,
+    playerVars: { playsinline: 1, rel: 0 },
+    events: {
+      onReady: () => {
+        playerReady = true;
+        player.setVolume(currentMusicVol);
+      },
+      onError: (e) => {
+        showYtMsg('動画を再生できなかった（エラー ' + e.data + '）。ファイルを直接開いているなら、GitHub Pagesなどのサーバーに置いて開いてみて。');
+      }
+    }
+  });
+};
+
+function showYtMsg(text) {
+  const el = $('ytMsg');
+  el.textContent = text;
+  el.style.display = 'block';
+}
+
+function playMusic() {
+  if (playerReady) {
+    player.playVideo();
+  }
+}
+function stopMusic() {
+  if (playerReady) {
+    player.pauseVideo();
+  }
+}
+
+// 音量を少しずつ変える（急に変わると耳障りなので）
+function fadeMusicTo(target, ms) {
+  clearInterval(fadeTimer);
+  const start = currentMusicVol;
+  const steps = Math.max(1, Math.round(ms / 50));
+  let i = 0;
+  fadeTimer = setInterval(() => {
+    i++;
+    currentMusicVol = start + (target - start) * (i / steps);
+    if (playerReady) {
+      player.setVolume(Math.round(currentMusicVol));
+    }
+    if (i >= steps) {
+      clearInterval(fadeTimer);
+    }
+  }, 50);
+}
+
+function musicTargetVolume() {
+  if (phase !== 'work' && settings.duck) {
+    return settings.musicVol * 0.35;
+  }
+  return settings.musicVol;
+}
+function applyMusicForPhase() {
+  fadeMusicTo(musicTargetVolume(), 2000);
+}
+
+// ===================== 窓の雨アニメーション =====================
+const canvas = $('scene');
+const g2 = canvas.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+let buildings = [];
+let streaks = [];
+let glassDrops = [];
+
+function resizeScene() {
+  dpr = window.devicePixelRatio || 1;
+  W = canvas.clientWidth;
+  H = canvas.clientHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  g2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  makeBuildings();
+  glassDrops = [];
+  for (let i = 0; i < 45; i++) {
+    glassDrops.push(newGlassDrop(true));
+  }
+}
+
+function makeBuildings() {
+  buildings = [];
+  let x = -10;
+  while (x < W + 10) {
+    const w = 30 + Math.random() * 60;
+    const h = H * (0.25 + Math.random() * 0.45);
+    const wins = [];
+    for (let wy = H - h + 10; wy < H - 8; wy += 14) {
+      for (let wx = x + 6; wx < x + w - 8; wx += 11) {
+        if (Math.random() < 0.28) {
+          wins.push({ x: wx, y: wy, c: Math.random() < 0.8 ? '#f6c77d' : '#9fd0ff' });
+        }
+      }
+    }
+    buildings.push({ x, w, h, shade: 18 + Math.random() * 14, wins });
+    x += w + Math.random() * 6;
+  }
+}
+
+function newGlassDrop(anywhere) {
+  return {
+    x: Math.random() * W,
+    y: anywhere ? Math.random() * H : -10,
+    r: 1.5 + Math.random() * 3,
+    vy: 0,
+    sliding: false
+  };
+}
+
+function drawScene() {
+  const k = settings.intensity / 100;
+
+  // 夜空
+  const sky = g2.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#0b1426');
+  sky.addColorStop(0.7, '#1f2b48');
+  sky.addColorStop(1, '#3a3556');
+  g2.fillStyle = sky;
+  g2.fillRect(0, 0, W, H);
+
+  // 街
+  for (const b of buildings) {
+    g2.fillStyle = 'rgb(' + b.shade + ',' + (b.shade + 4) + ',' + (b.shade + 16) + ')';
+    g2.fillRect(b.x, H - b.h, b.w, b.h);
+    for (const w of b.wins) {
+      g2.fillStyle = w.c;
+      g2.globalAlpha = 0.75;
+      g2.fillRect(w.x, w.y, 5, 7);
+    }
+    g2.globalAlpha = 1;
+  }
+
+  // 雨でけむる感じ
+  g2.fillStyle = 'rgba(120, 140, 180, ' + (0.08 + k * 0.12) + ')';
+  g2.fillRect(0, 0, W, H);
+
+  // 降ってくる雨のすじ
+  const want = Math.round(40 + k * 220);
+  while (streaks.length < want) {
+    streaks.push({ x: Math.random() * W * 1.2, y: Math.random() * H, len: 8 + Math.random() * 14, v: 7 + Math.random() * 6 });
+  }
+  streaks.length = Math.min(streaks.length, want);
+  g2.strokeStyle = 'rgba(190, 210, 255, 0.35)';
+  g2.lineWidth = 1;
+  g2.beginPath();
+  for (const s of streaks) {
+    g2.moveTo(s.x, s.y);
+    g2.lineTo(s.x - s.len * 0.18, s.y + s.len);
+    s.y += s.v;
+    s.x -= s.v * 0.18;
+    if (s.y > H) {
+      s.y = -s.len;
+      s.x = Math.random() * W * 1.2;
+    }
+  }
+  g2.stroke();
+
+  // ガラスについた水滴（たまに流れ落ちる）
+  for (let i = 0; i < glassDrops.length; i++) {
+    const d = glassDrops[i];
+    if (!d.sliding && Math.random() < 0.0015 + k * 0.003) {
+      d.sliding = true;
+    }
+    if (d.sliding) {
+      d.vy = Math.min(d.vy + 0.05, 2.5);
+      d.y += d.vy;
+      g2.strokeStyle = 'rgba(200, 220, 255, 0.15)';
+      g2.lineWidth = d.r * 0.8;
+      g2.beginPath();
+      g2.moveTo(d.x, d.y - 18);
+      g2.lineTo(d.x, d.y);
+      g2.stroke();
+    }
+    g2.fillStyle = 'rgba(210, 225, 255, 0.35)';
+    g2.beginPath();
+    g2.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    g2.fill();
+    g2.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    g2.beginPath();
+    g2.arc(d.x - d.r * 0.3, d.y - d.r * 0.3, d.r * 0.35, 0, Math.PI * 2);
+    g2.fill();
+    if (d.y > H + 10) {
+      glassDrops[i] = newGlassDrop(false);
+    }
+  }
+
+  requestAnimationFrame(drawScene);
+}
+
+// ===================== 画面の操作 =====================
+function bindRange(id, key, onChange) {
+  const el = $(id);
+  const val = $(id + 'Val');
+  el.value = settings[key];
+  val.textContent = settings[key];
+  el.addEventListener('input', () => {
+    settings[key] = Number(el.value);
+    val.textContent = el.value;
+    saveSettings();
+    onChange();
+  });
+}
+function bindCheck(id, key, onChange) {
+  const el = $(id);
+  el.checked = settings[key];
+  el.addEventListener('change', () => {
+    settings[key] = el.checked;
+    saveSettings();
+    onChange();
+  });
+}
+function bindNumber(id, key) {
+  const el = $(id);
+  el.value = settings[key];
+  el.addEventListener('change', () => {
+    const n = Math.round(Number(el.value));
+    if (!(n >= 1)) {
+      el.value = settings[key];
+      return;
+    }
+    settings[key] = n;
+    saveSettings();
+    // 止まっていて、まだ始めていないフェーズなら新しい長さを反映
+    if (!running) {
+      remainingMs = durationOf(phase);
+    }
+    render();
+  });
+}
+
+$('startBtn').addEventListener('click', () => {
+  if (running) {
+    pauseTimer();
+  } else {
+    startTimer();
+  }
+});
+$('skipBtn').addEventListener('click', skipPhase);
+$('resetBtn').addEventListener('click', resetTimer);
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+    e.preventDefault();
+    $('startBtn').click();
+  }
+});
+
+bindRange('musicVol', 'musicVol', applyMusicForPhase);
+bindRange('rainVol', 'rainVol', () => { ensureAudio(); });
+bindRange('intensity', 'intensity', updateRain);
+bindCheck('musicOn', 'musicOn', () => {
+  if (settings.musicOn) {
+    playMusic();
+  } else {
+    stopMusic();
+  }
+});
+bindCheck('rainOn', 'rainOn', () => { ensureAudio(); });
+bindCheck('duck', 'duck', applyMusicForPhase);
+bindCheck('autoNext', 'autoNext', () => {});
+bindNumber('setWork', 'work');
+bindNumber('setShort', 'short');
+bindNumber('setLong', 'long');
+bindNumber('setEvery', 'every');
+
+$('setVideo').value = settings.videoId === DEFAULT_VIDEO ? '' : settings.videoId;
+$('setVideo').addEventListener('change', () => {
+  const raw = $('setVideo').value;
+  const id = raw.trim() === '' ? DEFAULT_VIDEO : parseVideoId(raw);
+  if (!id) {
+    showYtMsg('URLから動画IDを読み取れなかった。');
+    return;
+  }
+  settings.videoId = id;
+  saveSettings();
+  if (playerReady) {
+    player.cueVideoById(id);
+  }
+});
+
+remainingMs = durationOf('work');
+render();
+window.addEventListener('resize', resizeScene);
+resizeScene();
+requestAnimationFrame(drawScene);
+
+// YouTube IFrame APIを読み込む
+const ytScript = document.createElement('script');
+ytScript.src = 'https://www.youtube.com/iframe_api';
+document.head.appendChild(ytScript);
+</script>
+</body>
+</html>
