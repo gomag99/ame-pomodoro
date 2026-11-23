@@ -72,13 +72,120 @@
   .window .frame-v, .window .frame-h { position: absolute; background: #3a2c27; }
   .window .frame-v { top: 0; bottom: 0; left: 50%; width: 8px; transform: translateX(-50%); }
   .window .frame-h { left: 0; right: 0; top: 50%; height: 8px; transform: translateY(-50%); }
-  .sill { height: 14px; margin: -4px 6px 0; border-radius: 0 0 8px 8px; background: #4a3830; position: relative; }
-  .sill span { position: absolute; right: 18px; bottom: 12px; font-size: 26px; }
+  /* 窓台：上の面（奥行き）と手前の縁 */
+  .sill {
+    position: relative;
+    height: 72px;
+    margin: -6px -8px 0;
+    border-radius: 3px 3px 10px 10px;
+    background: linear-gradient(180deg, #6e4e3c 0%, #5c4132 60%, #3f2b21 61%, #34241b 100%);
+    box-shadow: 0 16px 28px rgba(0, 0, 0, .38), inset 0 1px 0 rgba(255, 230, 200, .08);
+  }
+  .sill::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 0; height: 60%;
+    border-radius: 3px 3px 0 0;
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, .28), transparent 35%),
+      repeating-linear-gradient(90deg, rgba(255, 235, 210, .025) 0 2px, transparent 2px 11px),
+      repeating-linear-gradient(91deg, rgba(0, 0, 0, .05) 0 1px, transparent 1px 23px);
+  }
+  .sill::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 60%; height: 1px;
+    background: rgba(255, 225, 190, .12);
+  }
+
+  /* 窓台の卓上時計 */
+  .desk-clock {
+    position: absolute;
+    left: 7%;
+    bottom: 22px;
+    width: clamp(88px, 22vw, 128px);
+    z-index: 2;
+  }
+  .desk-clock svg { display: block; width: 100%; height: auto; position: relative; z-index: 1; }
+  .desk-clock::after {
+    content: '';
+    position: absolute;
+    left: 8%; right: 8%; bottom: -5px; height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0) 70%);
+  }
+  .clock-wedge { transition: fill .8s; }
+  .clock-wedge.work { fill: rgba(190, 110, 70, .26); }
+  .clock-wedge.break { fill: rgba(100, 145, 125, .28); }
+
+  /* マグカップ */
+  .mug {
+    position: absolute;
+    right: 9%;
+    bottom: 24px;
+    width: clamp(34px, 7vw, 46px);
+    z-index: 2;
+  }
+  .mug svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .mug::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 18%; bottom: -3px; height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5), rgba(0, 0, 0, 0) 70%);
+  }
+  .steam { animation: steam 3.6s ease-in-out infinite; opacity: 0; }
+  .steam.s2 { animation-delay: 1.2s; }
+  .steam.s3 { animation-delay: 2.4s; }
+  @keyframes steam {
+    0% { opacity: 0; transform: translateY(4px); }
+    35% { opacity: .45; }
+    100% { opacity: 0; transform: translateY(-10px); }
+  }
+
+  /* 休憩中に窓台へ来る猫（長い休憩では子猫も一緒） */
+  .cats {
+    position: absolute;
+    left: 38%;
+    bottom: 22px;
+    width: clamp(92px, 19vw, 132px);
+    z-index: 2;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 3s ease, transform 3s ease;
+    pointer-events: none;
+  }
+  .cats.show { opacity: 1; transform: none; }
+  .cats svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .cats .kitten { opacity: 0; transition: opacity 3s ease; }
+  .cats.long .kitten { opacity: 1; }
+  .cats .breathe { transform-box: fill-box; transform-origin: 50% 100%; animation: breathe 4.5s ease-in-out infinite; }
+  .cats .kitten .breathe { animation-duration: 3.2s; }
+  @keyframes breathe {
+    0%, 100% { transform: scaleY(1); }
+    50% { transform: scaleY(1.035); }
+  }
+
+  @media (max-width: 520px) {
+    .sill { height: 64px; margin: -6px -6px 0; }
+    .cats { left: 36%; bottom: 20px; }
+    .desk-clock { left: 5%; bottom: 20px; }
+    .mug { right: 7%; bottom: 21px; }
+  }
+
+  /* 動きを減らす設定のとき */
+  @media (prefers-reduced-motion: reduce) {
+    .steam { animation: none; opacity: .3; }
+    .cats .breathe { animation: none; }
+    .cats { transform: none; }
+    .vinyl { animation: none; }
+    .clock-wedge { transition: none; }
+  }
 
   /* タイマー */
   .phase { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .1em; }
   .time {
-    font-size: clamp(64px, 12vw, 104px);
+    font-size: clamp(44px, 7vw, 60px);
     font-weight: 800;
     line-height: 1;
     margin: 6px 0 14px;
@@ -157,7 +264,122 @@
         <div class="frame-v"></div>
         <div class="frame-h"></div>
       </div>
-      <div class="sill"><span>☕</span></div>
+      <div class="sill">
+        <!-- 卓上時計：針は今の時刻ではなく、ポモドーロの残り時間を表す -->
+        <div class="desk-clock" id="deskClock" role="img" aria-label="残り時間 25:00">
+          <svg viewBox="0 0 200 212" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <radialGradient id="ckWalnut" cx="38%" cy="32%" r="75%">
+                <stop offset="0" stop-color="#7d5639"/>
+                <stop offset=".55" stop-color="#4c3020"/>
+                <stop offset="1" stop-color="#2a1a10"/>
+              </radialGradient>
+              <linearGradient id="ckBrass" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#d8ba7c"/>
+                <stop offset=".5" stop-color="#a7834b"/>
+                <stop offset="1" stop-color="#6f522b"/>
+              </linearGradient>
+              <radialGradient id="ckDial" cx="50%" cy="45%" r="60%">
+                <stop offset="0" stop-color="#f4ecda"/>
+                <stop offset=".7" stop-color="#e6d8bb"/>
+                <stop offset="1" stop-color="#cdb98f"/>
+              </radialGradient>
+              <linearGradient id="ckGlass" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+                <stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+                <stop offset="1" stop-color="#fff" stop-opacity=".04"/>
+              </linearGradient>
+            </defs>
+            <!-- 脚 -->
+            <ellipse cx="62" cy="199" rx="14" ry="7" fill="#3b2a1a"/>
+            <ellipse cx="138" cy="199" rx="14" ry="7" fill="#3b2a1a"/>
+            <ellipse cx="62" cy="196" rx="13" ry="6.5" fill="url(#ckBrass)"/>
+            <ellipse cx="138" cy="196" rx="13" ry="6.5" fill="url(#ckBrass)"/>
+            <!-- 木の外枠 -->
+            <circle cx="100" cy="100" r="93" fill="url(#ckWalnut)"/>
+            <circle cx="100" cy="100" r="92" fill="none" stroke="#1d120b" stroke-opacity=".6" stroke-width="2"/>
+            <path d="M30 70 A76 76 0 0 1 120 15" fill="none" stroke="#f3d6b0" stroke-opacity=".14" stroke-width="5" stroke-linecap="round"/>
+            <!-- 真鍮のふち -->
+            <circle cx="100" cy="100" r="78" fill="url(#ckBrass)"/>
+            <circle cx="100" cy="100" r="74.5" fill="#3a2716"/>
+            <!-- 文字盤 -->
+            <circle cx="100" cy="100" r="74" fill="url(#ckDial)"/>
+            <path id="clockWedge" class="clock-wedge work" d=""/>
+            <g id="clockTicks"></g>
+            <g id="clockNums" font-family="Georgia, 'Times New Roman', serif" font-size="12" fill="#5a4630" text-anchor="middle"></g>
+            <text id="clockPhase" x="100" y="72" font-family="Georgia, serif" font-size="7" letter-spacing="2" fill="#8a7457" text-anchor="middle">WORK</text>
+            <!-- 残り時間の小窓 -->
+            <rect x="73" y="120" width="54" height="18" rx="3" fill="#2b2119" stroke="url(#ckBrass)" stroke-width="1.2"/>
+            <text id="clockDigital" x="100" y="133.2" font-family="'Courier New', monospace" font-size="11.5" font-weight="700" fill="#ead3a2" text-anchor="middle">25:00</text>
+            <!-- 長い針（残り時間） -->
+            <g id="minuteHand">
+              <path d="M100 112 L96.6 100 L100 38 L103.4 100 Z" fill="url(#ckBrass)" stroke="#5a4020" stroke-width=".6"/>
+            </g>
+            <!-- 秒針 -->
+            <g id="secondHand">
+              <line x1="100" y1="116" x2="100" y2="33" stroke="#5b3a22" stroke-width="1.2" stroke-linecap="round"/>
+              <circle cx="100" cy="111" r="3" fill="#5b3a22"/>
+            </g>
+            <circle cx="100" cy="100" r="5" fill="url(#ckBrass)" stroke="#5a4020" stroke-width=".6"/>
+            <circle cx="100" cy="100" r="1.8" fill="#3a2716"/>
+            <!-- ガラスの反射 -->
+            <circle cx="100" cy="100" r="74" fill="url(#ckGlass)" pointer-events="none"/>
+            <path d="M44 74 A60 60 0 0 1 92 38" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <!-- 休憩中に来る猫 -->
+        <div class="cats" id="cats" aria-hidden="true">
+          <svg viewBox="0 0 150 64" xmlns="http://www.w3.org/2000/svg">
+            <!-- 子猫（長い休憩のときだけ） -->
+            <g class="kitten">
+              <ellipse cx="32" cy="60" rx="22" ry="3.5" fill="#000" opacity=".35"/>
+              <g class="breathe">
+                <ellipse cx="36" cy="51" rx="17" ry="8.5" fill="#9a948f"/>
+                <ellipse cx="45" cy="49" rx="9" ry="7.5" fill="#9a948f"/>
+                <path d="M52 55 q-6 6 -24 5 q-8 -1 -12 -3" fill="none" stroke="#857f7a" stroke-width="4" stroke-linecap="round"/>
+              </g>
+              <circle cx="21" cy="50" r="7.5" fill="#a39d98"/>
+              <path d="M15.5 46 L14.5 39.5 L20 44 Z M22 43.2 L27 39 L27.2 45.5 Z" fill="#a39d98"/>
+              <path d="M16 46.5 L15.5 42 L18.6 44.7 Z" fill="#d9a7a0" opacity=".6"/>
+              <path d="M16.5 50 q2 1.6 4 0 M22.5 50 q2 1.6 4 0" fill="none" stroke="#3d3632" stroke-width=".9" stroke-linecap="round"/>
+              <path d="M20.4 52.6 l1.2 .9 l1.2 -.9 z" fill="#c98a86"/>
+            </g>
+            <!-- 親猫 -->
+            <ellipse cx="95" cy="60" rx="44" ry="4.5" fill="#000" opacity=".4"/>
+            <g class="breathe">
+              <ellipse cx="96" cy="46" rx="33" ry="14.5" fill="#c4874f"/>
+              <ellipse cx="113" cy="41" rx="17" ry="14" fill="#c4874f"/>
+              <!-- しま模様 -->
+              <path d="M90 33 q3 6 1 12 M99 32 q3 6 1 12 M108 30 q4 6 2 13 M118 31 q3 5 1 11" fill="none" stroke="#a46a37" stroke-width="2.4" stroke-linecap="round" opacity=".75"/>
+              <!-- しっぽ（体の前にくるりと） -->
+              <path d="M126 52 q-4 9 -30 8.5 q-18 -.5 -26 -4" fill="none" stroke="#b97c45" stroke-width="7" stroke-linecap="round"/>
+              <path d="M76 57 q-5 -1.5 -6 -3.5" fill="none" stroke="#8d5a2c" stroke-width="7" stroke-linecap="round"/>
+            </g>
+            <!-- 頭（前足にあごをのせて寝ている） -->
+            <ellipse cx="68" cy="47" rx="13" ry="11.5" fill="#cb8e56"/>
+            <path d="M58.5 41 L56.5 31 L65 37.5 Z M70.5 36.2 L78.5 30.5 L78.8 40.5 Z" fill="#cb8e56"/>
+            <path d="M59.5 40 L58.4 34 L63.2 37.8 Z M72 36.5 L77 33.2 L77.3 39 Z" fill="#e7b39e" opacity=".55"/>
+            <path d="M62 39 q2 2.5 1 5 M68 37 q1 2.5 0 5" fill="none" stroke="#a46a37" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+            <path d="M60.5 47.5 q2.6 2 5.2 0 M70 47.5 q2.6 2 5.2 0" fill="none" stroke="#3a2618" stroke-width="1.1" stroke-linecap="round"/>
+            <path d="M66.6 51 l1.5 1.1 l1.5 -1.1 z" fill="#c9827a"/>
+            <ellipse cx="62" cy="57" rx="7" ry="3.6" fill="#d7a06d"/>
+            <ellipse cx="74" cy="57.5" rx="7" ry="3.6" fill="#d7a06d"/>
+          </svg>
+        </div>
+        <!-- マグカップ -->
+        <div class="mug" aria-hidden="true">
+          <svg viewBox="0 0 48 52" xmlns="http://www.w3.org/2000/svg">
+            <path class="steam s1" d="M14 14 q-4 -5 0 -9 q4 -4 0 -9" fill="none" stroke="#e8dcc8" stroke-width="1.6" stroke-linecap="round"/>
+            <path class="steam s2" d="M21 14 q-4 -5 0 -9 q4 -4 0 -9" fill="none" stroke="#e8dcc8" stroke-width="1.6" stroke-linecap="round"/>
+            <path class="steam s3" d="M28 14 q-4 -5 0 -9 q4 -4 0 -9" fill="none" stroke="#e8dcc8" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M34 25 h3 a7 7 0 0 1 0 14 h-4" fill="none" stroke="#c9b9a2" stroke-width="3.5"/>
+            <path d="M5 19 h31 v22 a9 9 0 0 1 -9 9 h-13 a9 9 0 0 1 -9 -9 z" fill="#d9cbb5"/>
+            <path d="M5 19 h31 v22 a9 9 0 0 1 -9 9 h-13 a9 9 0 0 1 -9 -9 z" fill="none" stroke="#a8977d" stroke-width="1"/>
+            <ellipse cx="20.5" cy="19.5" rx="15.5" ry="3" fill="#4a2e1d"/>
+            <path d="M9 24 v15" stroke="#fff" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -391,6 +613,113 @@ function render() {
   const label = document.createElement('span');
   label.textContent = '今日 ' + doneCount + ' ポモドーロ';
   dots.appendChild(label);
+
+  renderClock();
+
+  // 休憩中は猫が来る。長い休憩では子猫も一緒
+  const cats = $('cats');
+  cats.classList.toggle('show', phase !== 'work');
+  cats.classList.toggle('long', phase === 'long');
+}
+
+// ===================== 窓台の時計 =====================
+// タイマーの処理は持たず、既存の endAt / remainingMs を読んで針の角度に変えるだけ
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+let reduceMotion = motionQuery ? motionQuery.matches : false;
+let clockDialMinutes = 0;
+
+// 文字盤の目盛りと数字を作る（60分で1周。60分より長いフェーズは120分で1周）
+function buildClockFace(dialMinutes) {
+  clockDialMinutes = dialMinutes;
+  const ticks = $('clockTicks');
+  const nums = $('clockNums');
+  ticks.innerHTML = '';
+  nums.innerHTML = '';
+  for (let i = 0; i < 60; i++) {
+    const major = i % 5 === 0;
+    const a = (i * 6 - 90) * Math.PI / 180;
+    const r1 = 70;
+    const r2 = major ? 62.5 : 66.5;
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', 100 + r1 * Math.cos(a));
+    line.setAttribute('y1', 100 + r1 * Math.sin(a));
+    line.setAttribute('x2', 100 + r2 * Math.cos(a));
+    line.setAttribute('y2', 100 + r2 * Math.sin(a));
+    line.setAttribute('stroke', '#6b5a44');
+    line.setAttribute('stroke-opacity', major ? '.85' : '.45');
+    line.setAttribute('stroke-width', major ? '1.8' : '.8');
+    ticks.appendChild(line);
+  }
+  for (let q = 0; q < 4; q++) {
+    const a = (q * 90 - 90) * Math.PI / 180;
+    const t = document.createElementNS(SVG_NS, 'text');
+    t.setAttribute('x', 100 + 52 * Math.cos(a));
+    t.setAttribute('y', 100 + 52 * Math.sin(a) + 4.2);
+    t.textContent = String(q * dialMinutes / 4);
+    nums.appendChild(t);
+  }
+}
+
+// 12時の位置から、残り時間の角度までの扇形
+function wedgePath(deg) {
+  const r = 61;
+  if (deg <= 0.05) {
+    return '';
+  }
+  if (deg >= 359.95) {
+    return 'M100 100 m-' + r + ' 0 a' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0 a' + r + ' ' + r + ' 0 1 0 -' + (2 * r) + ' 0';
+  }
+  const rad = (deg - 90) * Math.PI / 180;
+  const x = 100 + r * Math.cos(rad);
+  const y = 100 + r * Math.sin(rad);
+  const large = deg > 180 ? 1 : 0;
+  return 'M100 100 L100 ' + (100 - r) + ' A' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' Z';
+}
+
+// 今の残り時間：動いているときは「終わる時刻 - 今」、止まっているときは remainingMs
+function clockRemainingMs() {
+  return running ? Math.max(0, endAt - Date.now()) : remainingMs;
+}
+
+function renderClock() {
+  const total = durationOf(phase);
+  const dialMinutes = total <= 60 * 60 * 1000 ? 60 : 120;
+  if (dialMinutes !== clockDialMinutes) {
+    buildClockFace(dialMinutes);
+  }
+  const rem = clockRemainingMs();
+  const minuteDeg = rem / (dialMinutes * 60 * 1000) * 360;
+  // 動きを減らす設定のときは、秒針をなめらかに動かさず1秒ずつ進める
+  const secs = reduceMotion ? Math.ceil(rem / 1000) : rem / 1000;
+  const secondDeg = (secs % 60) * 6;
+
+  $('minuteHand').setAttribute('transform', 'rotate(' + minuteDeg.toFixed(2) + ' 100 100)');
+  $('secondHand').setAttribute('transform', 'rotate(' + secondDeg.toFixed(2) + ' 100 100)');
+  const wedge = $('clockWedge');
+  wedge.setAttribute('d', wedgePath(minuteDeg));
+  wedge.setAttribute('class', 'clock-wedge ' + (phase === 'work' ? 'work' : 'break'));
+  const text = formatTime(rem);
+  const label = PHASE_LABEL[phase] + ' 残り時間 ' + text;
+  if ($('deskClock').getAttribute('aria-label') !== label) {
+    $('clockDigital').textContent = text;
+    $('deskClock').setAttribute('aria-label', label);
+  }
+  $('clockPhase').textContent = phase === 'work' ? 'WORK' : 'BREAK';
+}
+
+// 動いている間だけ、毎フレーム針を更新する（動きを減らす設定のときは render() の更新だけ）
+function clockLoop() {
+  if (running && !reduceMotion) {
+    renderClock();
+  }
+  requestAnimationFrame(clockLoop);
+}
+if (motionQuery && motionQuery.addEventListener) {
+  motionQuery.addEventListener('change', (e) => {
+    reduceMotion = e.matches;
+    renderClock();
+  });
 }
 
 // ===================== 音（Web Audio API） =====================
@@ -398,6 +727,7 @@ let ctx = null;
 let rainMaster = null;   // 雨全体の音量
 let sheetGain = null;    // ザーッという面の音
 let sheetFilter = null;
+let rumbleGain = null;   // 遠くのゴーッという音
 let dropBuffer = null;
 let dropTimer = null;
 
@@ -472,7 +802,7 @@ function buildRain() {
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
   lp.frequency.value = 300;
-  const rumbleGain = ctx.createGain();
+  rumbleGain = ctx.createGain();
   rumbleGain.gain.value = 0.5;
   rumble.connect(lp).connect(rumbleGain).connect(rainMaster);
 
@@ -486,7 +816,8 @@ function scheduleDrops() {
   if (!ctx || !settings.rainOn) {
     return;
   }
-  const perSecond = 4 + settings.intensity * 0.5;
+  // 雨が上がったら（強さ0）、軒先からたまに落ちるしずくだけにする
+  const perSecond = settings.intensity === 0 ? 0.25 : 4 + settings.intensity * 0.5;
   let count = 0;
   const expected = perSecond * 0.1;
   // ポアソン分布っぽくばらつかせる
@@ -535,7 +866,11 @@ function updateRain() {
   const vol = settings.rainOn ? (settings.rainVol / 100) * 0.9 : 0;
   rainMaster.gain.setTargetAtTime(vol, now, 0.4);
   const k = settings.intensity / 100;
-  sheetGain.gain.setTargetAtTime(0.3 + k * 0.9, now, 0.4);
+  const raining = settings.intensity > 0;
+  // 雨が上がるときは、数秒かけてゆっくり静かになる
+  const fade = raining ? 0.4 : 1.5;
+  sheetGain.gain.setTargetAtTime(raining ? 0.3 + k * 0.9 : 0, now, fade);
+  rumbleGain.gain.setTargetAtTime(raining ? 0.5 : 0.06, now, fade);
   sheetFilter.frequency.setTargetAtTime(2500 + k * 6000, now, 0.4);
 }
 
@@ -1110,6 +1445,7 @@ let W = 0, H = 0, dpr = 1;
 let buildings = [];
 let streaks = [];
 let glassDrops = [];
+let sceneStarted = false;
 
 function resizeScene() {
   dpr = window.devicePixelRatio || 1;
@@ -1134,13 +1470,36 @@ function makeBuildings() {
     const wins = [];
     for (let wy = H - h + 10; wy < H - 8; wy += 14) {
       for (let wx = x + 6; wx < x + w - 8; wx += 11) {
-        if (Math.random() < 0.28) {
-          wins.push({ x: wx, y: wy, c: Math.random() < 0.8 ? '#f6c77d' : '#9fd0ff' });
-        }
+        wins.push({ x: wx, y: wy, on: Math.random() < 0.28, c: Math.random() < 0.8 ? '#f6c77d' : '#9fd0ff' });
       }
     }
     buildings.push({ x, w, h, shade: 18 + Math.random() * 14, wins });
     x += w + Math.random() * 6;
+  }
+}
+
+// 街の明かりを、たまに1つだけつけたり消したりする（数秒〜十数秒に1回）
+let nextLightToggle = 0;
+function maybeToggleLight(now) {
+  if (now < nextLightToggle) {
+    return;
+  }
+  nextLightToggle = now + 4000 + Math.random() * 12000;
+  const all = [];
+  for (const b of buildings) {
+    for (const w of b.wins) {
+      all.push(w);
+    }
+  }
+  if (all.length === 0) {
+    return;
+  }
+  // ついている窓の割合が増えすぎたり減りすぎたりしないように、どちらを切り替えるか決める
+  const onCount = all.filter((w) => w.on).length;
+  const turnOn = onCount / all.length < 0.28 ? Math.random() < 0.7 : Math.random() < 0.3;
+  const candidates = all.filter((w) => w.on !== turnOn);
+  if (candidates.length > 0) {
+    pick(candidates).on = turnOn;
   }
 }
 
@@ -1154,8 +1513,10 @@ function newGlassDrop(anywhere) {
   };
 }
 
-function drawScene() {
+function drawScene(now) {
   const k = settings.intensity / 100;
+  const raining = settings.intensity > 0;
+  maybeToggleLight(now || 0);
 
   // 夜空
   const sky = g2.createLinearGradient(0, 0, 0, H);
@@ -1170,6 +1531,9 @@ function drawScene() {
     g2.fillStyle = 'rgb(' + b.shade + ',' + (b.shade + 4) + ',' + (b.shade + 16) + ')';
     g2.fillRect(b.x, H - b.h, b.w, b.h);
     for (const w of b.wins) {
+      if (!w.on) {
+        continue;
+      }
       g2.fillStyle = w.c;
       g2.globalAlpha = 0.75;
       g2.fillRect(w.x, w.y, 5, 7);
@@ -1182,30 +1546,44 @@ function drawScene() {
   g2.fillRect(0, 0, W, H);
 
   // 降ってくる雨のすじ
-  const want = Math.round(40 + k * 220);
+  const want = raining ? Math.round(40 + k * 220) : 0;
+  const firstFill = streaks.length === 0 && !sceneStarted;
   while (streaks.length < want) {
-    streaks.push({ x: Math.random() * W * 1.2, y: Math.random() * H, len: 8 + Math.random() * 14, v: 7 + Math.random() * 6 });
+    // 最初は画面全体に、あとから増える分は画面の上から降らせる
+    const y = firstFill ? Math.random() * H : -Math.random() * H * 0.6;
+    streaks.push({ x: Math.random() * W * 1.2, y: y, len: 8 + Math.random() * 14, v: 7 + Math.random() * 6 });
   }
-  streaks.length = Math.min(streaks.length, want);
+  sceneStarted = true;
   g2.strokeStyle = 'rgba(190, 210, 255, 0.35)';
   g2.lineWidth = 1;
   g2.beginPath();
-  for (const s of streaks) {
+  for (let i = streaks.length - 1; i >= 0; i--) {
+    const s = streaks[i];
     g2.moveTo(s.x, s.y);
     g2.lineTo(s.x - s.len * 0.18, s.y + s.len);
     s.y += s.v;
     s.x -= s.v * 0.18;
     if (s.y > H) {
-      s.y = -s.len;
-      s.x = Math.random() * W * 1.2;
+      if (streaks.length > want) {
+        streaks.splice(i, 1); // 減らしたいときは、下まで落ちたものから消す
+      } else {
+        s.y = -s.len;
+        s.x = Math.random() * W * 1.2;
+      }
     }
   }
   g2.stroke();
 
   // ガラスについた水滴（たまに流れ落ちる）
-  for (let i = 0; i < glassDrops.length; i++) {
+  // 雨が降っている間は、ガラスに新しい水滴がときどき増える
+  if (raining && glassDrops.length < 45 && Math.random() < 0.02 + k * 0.05) {
+    glassDrops.push(newGlassDrop(true));
+  }
+  for (let i = glassDrops.length - 1; i >= 0; i--) {
     const d = glassDrops[i];
-    if (!d.sliding && Math.random() < 0.0015 + k * 0.003) {
+    // 雨が上がると、水滴はほとんど流れずにガラスに残る
+    const slideChance = raining ? 0.0015 + k * 0.003 : 0.0002;
+    if (!d.sliding && Math.random() < slideChance) {
       d.sliding = true;
     }
     if (d.sliding) {
@@ -1227,7 +1605,11 @@ function drawScene() {
     g2.arc(d.x - d.r * 0.3, d.y - d.r * 0.3, d.r * 0.35, 0, Math.PI * 2);
     g2.fill();
     if (d.y > H + 10) {
-      glassDrops[i] = newGlassDrop(false);
+      if (raining) {
+        glassDrops[i] = newGlassDrop(false);
+      } else {
+        glassDrops.splice(i, 1);
+      }
     }
   }
 
@@ -1327,6 +1709,7 @@ render();
 window.addEventListener('resize', resizeScene);
 resizeScene();
 requestAnimationFrame(drawScene);
+requestAnimationFrame(clockLoop);
 
 </script>
 </body>
